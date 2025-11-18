@@ -10,17 +10,50 @@ import logo from "@/assets/logo.svg"
 
 // Eye icons for password visibility
 const EyeOpenIcon = () => (
-  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-  </svg>
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+    </svg>
 )
 
 const EyeClosedIcon = () => (
-  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-  </svg>
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+    </svg>
 )
+
+// Cookie utility functions with session and persistent options
+const setCookie = (name: string, value: string, days?: number) => {
+    let expires = "";
+    if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = "; expires=" + date.toUTCString();
+    }
+    // For session cookie (no days provided), don't set expires
+    document.cookie = name + "=" + value + expires + "; path=/; SameSite=Lax";
+}
+
+const getCookie = (name: string): string => {
+    const nameEQ = name + "=";
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1, c.length);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return "";
+}
+
+const deleteCookie = (name: string) => {
+    document.cookie = name + '=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+}
+
+// Cookie lifetime configuration
+const COOKIE_CONFIG = {
+    SESSION: undefined, // Session cookie (expires when browser closes)
+    PERSISTENT: 365, // 1 year for persistent storage
+} as const;
 
 interface RoomInfo {
     room_id: string;
@@ -43,26 +76,59 @@ const FormComponent = () => {
     const [verifiedPassword, setVerifiedPassword] = useState("") // Store verified password
     const [showPassword, setShowPassword] = useState(false) // For password visibility
     const [showModalPassword, setShowModalPassword] = useState(false) // For modal password visibility
+    const [isAutoLoginAttempted, setIsAutoLoginAttempted] = useState(false) // Prevent multiple auto-login attempts
+    const [cookieLifetime, setCookieLifetime] = useState<number | undefined>(COOKIE_CONFIG.PERSISTENT) // Cookie lifetime state
 
     const usernameRef = useRef<HTMLInputElement | null>(null)
     const passwordRef = useRef<HTMLInputElement | null>(null)
     const navigate = useNavigate()
 
-    // Load saved credentials from localStorage
+    // Load saved credentials from cookies and determine lifetime
     useEffect(() => {
-        const savedUsername = localStorage.getItem("savedUsername")
-        const savedRoomId = localStorage.getItem("savedRoomId")
-        const savedRememberMe = localStorage.getItem("rememberMe") === "true"
-        
+        const savedUsername = getCookie("savedUsername")
+        const savedRoomId = getCookie("savedRoomId")
+        const savedRememberMe = getCookie("rememberMe") === "true"
+        const savedLifetime = getCookie("cookieLifetime")
+
         if (savedRememberMe && savedUsername && savedRoomId) {
-            setCurrentUser({ 
-                ...currentUser, 
+            setCurrentUser({
+                ...currentUser,
                 username: savedUsername,
                 roomId: savedRoomId
             })
             setRememberMe(true)
+            
+            // Set the cookie lifetime based on saved value
+            if (savedLifetime) {
+                const lifetime = savedLifetime === "session" ? undefined : parseInt(savedLifetime)
+                setCookieLifetime(lifetime)
+            }
         }
     }, [setCurrentUser])
+
+    // Auto-login when credentials are available and form is valid
+    useEffect(() => {
+        if (isAutoLoginAttempted || status === USER_STATUS.ATTEMPTING_JOIN || status === USER_STATUS.JOINED) {
+            return;
+        }
+
+        const savedUsername = getCookie("savedUsername");
+        const savedRoomId = getCookie("savedRoomId");
+        const savedRememberMe = getCookie("rememberMe") === "true";
+
+        if (savedRememberMe && savedUsername && savedRoomId && 
+            currentUser.username === savedUsername && 
+            currentUser.roomId === savedRoomId &&
+            currentUser.username.trim().length >= 3 && 
+            currentUser.roomId.trim().length >= 5) {
+            
+            setIsAutoLoginAttempted(true);
+            // Small delay to ensure context is properly set
+            setTimeout(() => {
+                handleAutoJoin();
+            }, 100);
+        }
+    }, [currentUser, status, isAutoLoginAttempted]);
 
     const createNewRoomId = () => {
         const newRoomId = uuidv4()
@@ -84,7 +150,38 @@ const FormComponent = () => {
     }
 
     const handleRememberMeChange = (e: ChangeEvent<HTMLInputElement>) => {
-        setRememberMe(e.target.checked)
+        const isChecked = e.target.checked
+        setRememberMe(isChecked)
+        
+        // If unchecking remember me, reset to default persistent lifetime
+        if (!isChecked) {
+            setCookieLifetime(COOKIE_CONFIG.PERSISTENT)
+        }
+    }
+
+    const handleCookieLifetimeChange = (e: ChangeEvent<HTMLSelectElement>) => {
+        const value = e.target.value
+        let lifetime: number | undefined
+        
+        if (value === "session") {
+            lifetime = undefined
+        } else {
+            lifetime = parseInt(value)
+        }
+        
+        setCookieLifetime(lifetime)
+        
+        // Update cookies immediately if remember me is checked
+        if (rememberMe && currentUser.username && currentUser.roomId) {
+            saveCredentialsToCookies(lifetime)
+        }
+    }
+
+    const saveCredentialsToCookies = (lifetime?: number) => {
+        setCookie("savedUsername", currentUser.username, lifetime)
+        setCookie("savedRoomId", currentUser.roomId, lifetime)
+        setCookie("rememberMe", "true", lifetime)
+        setCookie("cookieLifetime", lifetime ? lifetime.toString() : "session", lifetime)
     }
 
     const togglePasswordVisibility = () => {
@@ -124,7 +221,7 @@ const FormComponent = () => {
 
     const checkRoomInfo = async () => {
         if (currentUser.roomId.trim().length < 5) return
-        
+
         setIsCheckingRoom(true)
         socket.emit(SocketEvent.ROOM_INFO_REQUEST, { roomId: currentUser.roomId })
     }
@@ -145,21 +242,28 @@ const FormComponent = () => {
         })
     }
 
+    const handleAutoJoin = () => {
+        if (status === USER_STATUS.ATTEMPTING_JOIN || status === USER_STATUS.JOINED) return
+        
+        console.log("Auto-joining room with saved credentials...")
+        proceedWithJoin()
+    }
+
     const joinRoom = (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
-        if (status === USER_STATUS.ATTEMPTING_JOIN) return
+        if (status === USER_STATUS.ATTEMPTING_JOIN || status === USER_STATUS.JOINED) return
         if (!validateForm()) return
 
         // Save credentials if remember me is checked
         if (rememberMe) {
-            localStorage.setItem("savedUsername", currentUser.username)
-            localStorage.setItem("savedRoomId", currentUser.roomId)
-            localStorage.setItem("rememberMe", "true")
+            saveCredentialsToCookies(cookieLifetime)
+            toast.success(`Credentials saved ${cookieLifetime ? `for ${cookieLifetime} days` : 'for this session'}`)
         } else {
             // Clear saved credentials
-            localStorage.removeItem("savedUsername")
-            localStorage.removeItem("savedRoomId")
-            localStorage.removeItem("rememberMe")
+            deleteCookie("savedUsername")
+            deleteCookie("savedRoomId")
+            deleteCookie("rememberMe")
+            deleteCookie("cookieLifetime")
         }
 
         // If room exists and has password, show password modal
@@ -175,10 +279,10 @@ const FormComponent = () => {
     const proceedWithJoin = (passwordToUse?: string) => {
         toast.loading(isCreatingRoom ? "Creating room..." : "Joining room...")
         setStatus(USER_STATUS.ATTEMPTING_JOIN)
-        
+
         // Use the provided password, verified password, or empty string
         const finalPassword = passwordToUse || verifiedPassword || (isCreatingRoom ? roomPassword : "")
-        
+
         const joinData = {
             roomId: currentUser.roomId,
             username: currentUser.username,
@@ -202,7 +306,7 @@ const FormComponent = () => {
         const handlePasswordValid = (data: { roomId: string }) => {
             setShowPasswordModal(false)
             toast.success("Password verified!")
-            // Use the current roomPassword that was just verified
+            console.log('Verified room:', data.roomId)
             proceedWithJoin(roomPassword)
         }
 
@@ -235,15 +339,17 @@ const FormComponent = () => {
             setStatus(USER_STATUS.JOINED)
             toast.dismiss()
             toast.success("Successfully joined room!")
-            // Clear verified password after successful join
             setVerifiedPassword("")
             setRoomPassword("")
+            // Use join data if needed
+            console.log('Joined room:', data)
         }
 
         const handleUsernameExists = () => {
             setStatus(USER_STATUS.DISCONNECTED)
             toast.dismiss()
             toast.error("Username already exists in this room")
+            setIsAutoLoginAttempted(false) // Reset auto-login attempt
         }
 
         const handleRoomCreated = (data: any) => {
@@ -251,6 +357,8 @@ const FormComponent = () => {
             toast.dismiss()
             toast.success("Room created successfully!")
             setRoomPassword("")
+            // Use room data if needed
+            console.log('Room created:', data)
         }
 
         socket.on(SocketEvent.ROOM_INFO_RESPONSE, handleRoomInfoResponse)
@@ -308,11 +416,39 @@ const FormComponent = () => {
         }
     }, [currentUser, location.state?.redirect, navigate, setStatus, socket, status])
 
+    const getCookieLifetimeText = () => {
+        if (!rememberMe) return ""
+        
+        if (cookieLifetime === undefined) {
+            return " (Session)"
+        } else if (cookieLifetime === 1) {
+            return " (1 day)"
+        } else if (cookieLifetime === 7) {
+            return " (1 week)"
+        } else if (cookieLifetime === 30) {
+            return " (1 month)"
+        } else if (cookieLifetime === 365) {
+            return " (1 year)"
+        } else {
+            return ` (${cookieLifetime} days)`
+        }
+    }
+
     return (
         <>
             <div className="flex w-full max-w-[500px] flex-col items-center justify-center gap-4 p-4 sm:w-[500px] sm:p-8">
-                <img src={logo} alt="Logo" className="w-full"/>
-                
+                <img src={logo} alt="Logo" className="w-full" />
+
+                {/* Auto-login indicator */}
+                {rememberMe && getCookie("savedUsername") && getCookie("savedRoomId") && (
+                    <div className="flex w-full items-center gap-2 rounded-md bg-blue-500/20 p-2 text-sm text-blue-400">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Auto-login enabled with saved credentials{getCookieLifetimeText()}
+                    </div>
+                )}
+
                 {/* Room Status Info */}
                 {currentUser.roomId.length >= 5 && (
                     <div className="w-full rounded-md bg-darkHover p-3 text-sm">
@@ -323,7 +459,7 @@ const FormComponent = () => {
                             </div>
                         ) : roomInfo ? (
                             <div className="text-green-400">
-                                ✓ Room found: {roomInfo.room_name} 
+                                ✓ Room found: {roomInfo.room_name}
                                 {roomInfo.has_password && " (Password protected)"}
                                 <div className="text-xs text-gray-400">
                                     {roomInfo.user_count} user(s) online
@@ -357,7 +493,7 @@ const FormComponent = () => {
                             </div>
                         )}
                     </div>
-                    
+
                     <input
                         type="text"
                         name="username"
@@ -388,53 +524,107 @@ const FormComponent = () => {
                         </div>
                     )}
 
-                    {/* Remember Me Checkbox */}
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            id="rememberMe"
-                            checked={rememberMe}
-                            onChange={handleRememberMeChange}
-                            className="h-4 w-4 rounded border-gray-500 bg-darkHover text-primary focus:ring-primary"
-                        />
-                        <label htmlFor="rememberMe" className="text-sm text-gray-300">
-                            Remember me
-                        </label>
+                    {/* Remember Me Checkbox and Lifetime Selection */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="checkbox"
+                                id="rememberMe"
+                                checked={rememberMe}
+                                onChange={handleRememberMeChange}
+                                className="h-4 w-4 rounded border-gray-500 bg-darkHover text-primary focus:ring-primary"
+                            />
+                            <label htmlFor="rememberMe" className="text-sm text-gray-300">
+                                Remember me
+                            </label>
+                            {rememberMe && (
+                                <svg className="h-4 w-4 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                            )}
+                        </div>
+
+                        {/* Cookie Lifetime Selection */}
+                        {rememberMe && (
+                            <div className="flex items-center gap-2">
+                                <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <select
+                                    value={cookieLifetime === undefined ? "session" : cookieLifetime.toString()}
+                                    onChange={handleCookieLifetimeChange}
+                                    className="rounded-md border border-gray-500 bg-darkHover px-2 py-1 text-sm text-gray-300 focus:outline-none"
+                                >
+                                    <option value="session">This session only</option>
+                                    <option value="1">1 day</option>
+                                    <option value="7">1 week</option>
+                                    <option value="30">1 month</option>
+                                    <option value="365">1 year</option>
+                                </select>
+                            </div>
+                        )}
                     </div>
 
                     <button
                         type="submit"
-                        className="mt-2 w-full rounded-md bg-primary px-8 py-3 text-lg font-semibold text-black disabled:opacity-50"
-                        disabled={status === USER_STATUS.ATTEMPTING_JOIN}
+                        className="mt-2 flex items-center justify-center gap-2 w-full rounded-md bg-primary px-8 py-3 text-lg font-semibold text-black disabled:opacity-50"
+                        disabled={status === USER_STATUS.ATTEMPTING_JOIN || status === USER_STATUS.JOINED}
                     >
-                        {status === USER_STATUS.ATTEMPTING_JOIN 
-                            ? (isCreatingRoom ? "Creating..." : "Joining...") 
-                            : (isCreatingRoom ? "Create Room" : "Join Room")
-                        }
+                        {status === USER_STATUS.ATTEMPTING_JOIN ? (
+                            <>
+                                <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                {isCreatingRoom ? "Creating..." : "Joining..."}
+                            </>
+                        ) : status === USER_STATUS.JOINED ? (
+                            <>
+                                <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                                Joined Successfully
+                            </>
+                        ) : (
+                            <>
+                                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
+                                {isCreatingRoom ? "Create Room" : "Join Room"}
+                            </>
+                        )}
                     </button>
                 </form>
 
                 <div className="flex w-full items-center justify-between">
                     <button
-                        className="cursor-pointer select-none underline"
+                        className="flex items-center gap-2 cursor-pointer select-none underline"
                         onClick={createNewRoomId}
                     >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
                         Generate Unique Room ID
                     </button>
-                    
+
                     {/* Clear saved credentials */}
-                    {localStorage.getItem("rememberMe") === "true" && (
+                    {getCookie("rememberMe") === "true" && (
                         <button
-                            className="cursor-pointer select-none text-sm text-red-400 underline"
+                            className="flex items-center gap-1 cursor-pointer select-none text-sm text-red-400 underline"
                             onClick={() => {
-                                localStorage.removeItem("savedUsername")
-                                localStorage.removeItem("savedRoomId")
-                                localStorage.removeItem("rememberMe")
+                                deleteCookie("savedUsername")
+                                deleteCookie("savedRoomId")
+                                deleteCookie("rememberMe")
+                                deleteCookie("cookieLifetime")
                                 setRememberMe(false)
                                 setCurrentUser({ ...currentUser, username: "", roomId: "" })
+                                setIsAutoLoginAttempted(false)
                                 toast.success("Saved credentials cleared")
                             }}
                         >
+                            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
                             Clear saved
                         </button>
                     )}
@@ -449,7 +639,7 @@ const FormComponent = () => {
                         <p className="mb-4 text-sm text-gray-300">
                             This room is protected with a password. Please enter the password to join.
                         </p>
-                        
+
                         <div className="relative mb-4">
                             <input
                                 type={showModalPassword ? "text" : "password"}
@@ -473,12 +663,15 @@ const FormComponent = () => {
                                 {showModalPassword ? <EyeClosedIcon /> : <EyeOpenIcon />}
                             </button>
                         </div>
-                        
+
                         <div className="flex gap-3">
                             <button
                                 onClick={handlePasswordSubmit}
-                                className="flex-1 rounded-md bg-primary px-4 py-2 font-semibold text-black"
+                                className="flex items-center justify-center gap-2 flex-1 rounded-md bg-primary px-4 py-2 font-semibold text-black"
                             >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                                </svg>
                                 Join Room
                             </button>
                             <button
@@ -487,8 +680,11 @@ const FormComponent = () => {
                                     setRoomPassword("")
                                     setVerifiedPassword("")
                                 }}
-                                className="flex-1 rounded-md border border-gray-500 px-4 py-2 font-semibold"
+                                className="flex items-center justify-center gap-2 flex-1 rounded-md border border-gray-500 px-4 py-2 font-semibold"
                             >
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
                                 Cancel
                             </button>
                         </div>

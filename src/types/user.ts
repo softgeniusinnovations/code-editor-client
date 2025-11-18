@@ -16,6 +16,7 @@ interface RemoteUser extends User {
     socketId: string
     selectionStart?: number
     selectionEnd?: number
+    photo?: string
 }
 
 enum USER_STATUS {
