@@ -21,6 +21,22 @@ import toast from "react-hot-toast"
 import { collaborativeHighlighting, updateRemoteUsers } from "./collaborativeHighlighting"
 import customMapping from "@/utils/customMapping"
 
+// Import additional language packages for comprehensive support
+import { javascript } from "@codemirror/lang-javascript"
+import { html } from "@codemirror/lang-html"
+import { css } from "@codemirror/lang-css"
+import { python } from "@codemirror/lang-python"
+import { java } from "@codemirror/lang-java"
+import { json } from "@codemirror/lang-json"
+import { markdown } from "@codemirror/lang-markdown"
+import { xml } from "@codemirror/lang-xml"
+import { yaml } from "@codemirror/lang-yaml"
+import { sql } from "@codemirror/lang-sql"
+import { php } from "@codemirror/lang-php"
+import { rust } from "@codemirror/lang-rust"
+import { go } from "@codemirror/lang-go"
+import { cpp } from "@codemirror/lang-cpp"
+
 function Editor() {
     const { users, currentUser } = useAppContext()
     const { activeFile, setActiveFile } = useFileSystem()
@@ -37,6 +53,46 @@ function Editor() {
     const [lastCursorPosition, setLastCursorPosition] = useState<number>(0)
     const [lastSelection, setLastSelection] = useState<{start?: number, end?: number}>({})
     const cursorMoveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Enhanced language mapping with fallback support
+    const languageExtensions: { [key: string]: () => Extension } = {
+        // Core web languages
+        javascript: () => javascript({ jsx: true, typescript: false }),
+        typescript: () => javascript({ jsx: true, typescript: true }),
+        jsx: () => javascript({ jsx: true, typescript: false }),
+        tsx: () => javascript({ jsx: true, typescript: true }),
+        
+        // HTML/CSS
+        html: () => html(),
+        css: () => css(),
+        scss: () => css(),
+        sass: () => css(),
+        less: () => css(),
+        
+        // Backend languages
+        python: () => python(),
+        java: () => java(),
+        php: () => php(),
+        
+        // System languages
+        c: () => cpp(),
+        cpp: () => cpp(),
+        rust: () => rust(),
+        go: () => go(),
+        
+        // Data formats
+        json: () => json(),
+        xml: () => xml(),
+        yaml: () => yaml(),
+        
+        // Documentation
+        markdown: () => markdown(),
+        
+        // Database
+        sql: () => sql(),
+        
+        // Add more languages as needed...
+    }
 
     // Function to detect language from file extension using customMapping
     const detectLanguageFromFile = useCallback((fileName: string): LanguageName | null => {
@@ -157,17 +213,34 @@ function Editor() {
 
         let langExt: Extension | null = null
         
-        if (actualLanguage) {
-            langExt = loadLanguage(actualLanguage)
+        // Try to load language using enhanced language extensions first
+        if (actualLanguage && languageExtensions[actualLanguage]) {
+            try {
+                langExt = languageExtensions[actualLanguage]()
+                console.log(`Loaded enhanced syntax highlighting for: ${actualLanguage}`)
+            } catch (error) {
+                console.warn(`Failed to load enhanced language ${actualLanguage}:`, error)
+            }
+        }
+        
+        // Fallback to basic language loading
+        if (!langExt && actualLanguage) {
+            try {
+                langExt = loadLanguage(actualLanguage)
+                console.log(`Loaded basic syntax highlighting for: ${actualLanguage}`)
+            } catch (error) {
+                console.warn(`Failed to load basic language ${actualLanguage}:`, error)
+            }
         }
 
         if (langExt) {
             setExtensions([...baseExtensions, langExt])
         } else {
             // Show warning only if we have a language that couldn't be mapped
-            if (language && !actualLanguage) {
+            if (actualLanguage) {
+                console.warn(`No syntax highlighting available for: ${actualLanguage}`)
                 toast.error(
-                    `Syntax highlighting is unavailable for "${language}". Using plain text mode.`,
+                    `Syntax highlighting is unavailable for "${actualLanguage}". Using plain text mode.`,
                     {
                         duration: 4000,
                         icon: '⚠️',

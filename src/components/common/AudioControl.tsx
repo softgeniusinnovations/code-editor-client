@@ -17,9 +17,13 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
     const [hasPermission, setHasPermission] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [showTooltip, setShowTooltip] = useState(true);
+    const [isSpeaking, setIsSpeaking] = useState(false);
     
     const webRTCManagerRef = useRef<WebRTCManager | null>(null);
     const localAudioRef = useRef<HTMLAudioElement>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const animationFrameRef = useRef<number>(0);
 
     useEffect(() => {
         if (!socket || !roomId) return;
@@ -79,9 +83,61 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
             socket.off('REMOTE_AUDIO_STREAM_ADDED');
             socket.off('USER_AUDIO_TOGGLED');
             
+            stopAudioAnalysis();
             webRTCManagerRef.current?.close();
         };
     }, [socket, roomId, username, setUserAudioStreams]);
+
+    const setupAudioAnalysis = (stream: MediaStream) => {
+        try {
+            // Create audio context and analyser
+            audioContextRef.current = new AudioContext();
+            analyserRef.current = audioContextRef.current.createAnalyser();
+            const source = audioContextRef.current.createMediaStreamSource(stream);
+            
+            // Configure analyser
+            analyserRef.current.fftSize = 256;
+            analyserRef.current.smoothingTimeConstant = 0.8;
+            source.connect(analyserRef.current);
+            
+            // Start analyzing
+            analyzeAudio();
+        } catch (error) {
+            console.error('Error setting up audio analysis:', error);
+        }
+    };
+
+    const analyzeAudio = () => {
+        if (!analyserRef.current) return;
+
+        const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+        analyserRef.current.getByteFrequencyData(dataArray);
+
+        // Calculate average volume
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+            sum += dataArray[i];
+        }
+        const average = sum / dataArray.length;
+
+        // Set speaking state based on volume threshold
+        setIsSpeaking(average > 20); // Adjust threshold as needed
+
+        // Continue analysis
+        animationFrameRef.current = requestAnimationFrame(analyzeAudio);
+    };
+
+    const stopAudioAnalysis = () => {
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+        analyserRef.current = null;
+        setIsSpeaking(false);
+    };
 
     const checkAudioPermission = async () => {
         try {
@@ -126,6 +182,12 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
                 if (success) {
                     setIsAudioEnabled(true);
                     
+                    // Setup audio analysis for speaking detection
+                    const localStream = webRTCManagerRef.current.getLocalStream();
+                    if (localStream) {
+                        setupAudioAnalysis(localStream);
+                    }
+                    
                     // Create offer and send to all users in room
                     const offer = await webRTCManagerRef.current.createOffer();
                     if (offer) {
@@ -137,7 +199,6 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
                     }
 
                     // Update local audio element
-                    const localStream = webRTCManagerRef.current.getLocalStream();
                     if (localAudioRef.current && localStream) {
                         localAudioRef.current.srcObject = localStream;
                     }
@@ -151,6 +212,7 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
                 }
             } else {
                 // Disable audio
+                stopAudioAnalysis();
                 webRTCManagerRef.current.disableAudio();
                 setIsAudioEnabled(false);
 
@@ -175,7 +237,10 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
     const getButtonText = () => {
         if (!hasPermission) return 'No Microphone Access';
         if (isLoading) return 'Loading...';
-        return isAudioEnabled ? 'Mute Audio' : 'Enable Audio';
+        if (isAudioEnabled) {
+            return isSpeaking ? 'Speaking...' : 'Microphone On';
+        }
+        return 'Enable Audio';
     };
 
     const getIcon = () => {
@@ -188,19 +253,29 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
             strokeWidth: "2"
         };
 
-        // Microphone ON (green)
+        // Microphone ON with speaking animation (green)
         if (isAudioEnabled && hasPermission) {
             return (
                 <svg {...baseProps} className="text-green-400">
+                    {/* Microphone body */}
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                     <line x1="12" y1="19" x2="12" y2="23" />
                     <line x1="8" y1="23" x2="16" y2="23" />
+                    
+                    {/* Animated sound waves when speaking */}
+                    {isSpeaking && (
+                        <>
+                            <path d="M3 12h1" className="animate-pulse" />
+                            <path d="M6 9h1" className="animate-pulse" style={{animationDelay: '0.1s'}} />
+                            <path d="M9 6h1" className="animate-pulse" style={{animationDelay: '0.2s'}} />
+                        </>
+                    )}
                 </svg>
             );
         }
 
-        // Microphone OFF with red cross (no permission or disabled)
+        // Microphone OFF with red line (red)
         return (
             <svg {...baseProps} className="text-red-400">
                 {/* Microphone body */}
@@ -208,9 +283,8 @@ const AudioControl: React.FC<AudioControlProps> = ({ roomId, username }) => {
                 <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                 <line x1="12" y1="19" x2="12" y2="23" />
                 <line x1="8" y1="23" x2="16" y2="23" />
-                {/* Red cross line through the microphone */}
-                <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" />
-                <line x1="20" y1="4" x2="4" y2="20" stroke="currentColor" strokeWidth="2.5" />
+                {/* Single red line through the microphone */}
+                <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" />
             </svg>
         );
     };

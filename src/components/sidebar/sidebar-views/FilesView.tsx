@@ -1,11 +1,11 @@
-import  { useState } from "react"
+import { useState } from "react"
 import FileStructureView from "@/components/files/FileStructureView"
 import { useFileSystem } from "@/context/FileContext"
 import useResponsive from "@/hooks/useResponsive"
 import { FileSystemItem } from "@/types/file"
 import cn from "classnames"
 import { BiArchiveIn } from "react-icons/bi"
-import { TbFileUpload } from "react-icons/tb"
+import { TbFileUpload, TbFolder } from "react-icons/tb"
 import { v4 as uuidV4 } from "uuid"
 import { toast } from "react-hot-toast"
 
@@ -52,6 +52,69 @@ function FilesView() {
         } finally {
             setIsLoading(false)
         }
+    }
+
+    const handleOpenFiles = async () => {
+        try {
+            setIsLoading(true)
+            
+            const fileInput = document.createElement("input")
+            fileInput.type = "file"
+            fileInput.multiple = true
+
+            fileInput.onchange = async (e) => {
+                const files = (e.target as HTMLInputElement).files
+                if (files && files.length > 0) {
+                    await processFiles(files)
+                }
+            }
+
+            fileInput.click()
+        } catch (error) {
+            console.error("Error opening files:", error)
+            toast.error("Failed to open files")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const processFiles = async (files: FileList) => {
+        try {
+            toast.loading(`Processing ${files.length} file(s)...`)
+            
+            const fileItems: FileSystemItem[] = []
+            
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i]
+                const newFile: FileSystemItem = {
+                    id: uuidV4(),
+                    name: file.name,
+                    type: "file",
+                    content: await readFileContent(file),
+                }
+                fileItems.push(newFile)
+            }
+            
+            // Get current structure and add new files
+            const currentStructure = await getCurrentFileStructure()
+            const updatedStructure = [...currentStructure, ...fileItems]
+            
+            // Update the directory with combined structure
+            updateDirectory("", updatedStructure)
+            
+            toast.dismiss()
+            toast.success(`Successfully added ${files.length} file(s)`)
+        } catch (error) {
+            console.error("Error processing files:", error)
+            toast.error("Failed to process files")
+        }
+    }
+
+    // Helper function to get current file structure
+    const getCurrentFileStructure = async (): Promise<FileSystemItem[]> => {
+        // This would need to be implemented based on your FileContext
+        // For now, returning empty array as placeholder
+        return []
     }
 
     const processDirectoryHandle = async (
@@ -157,19 +220,31 @@ function FilesView() {
     }
 
     const readFileContent = async (file: File): Promise<string> => {
-        const MAX_FILE_SIZE = 1024 * 1024; // 1MB limit
-
-        if (file.size > MAX_FILE_SIZE) {
-            return `File too large: ${file.name} (${Math.round(
-                file.size / 1024
-            )}KB)`
-        }
-
         try {
-            return await file.text()
+            // For text-based files, try to read as text
+            if (file.type.startsWith('text/') || 
+                file.type === 'application/json' ||
+                file.name.match(/\.(txt|js|jsx|ts|tsx|css|html|json|xml|md|py|java|c|cpp|cs|php|rb|go|rs|sh|bat|ps1)$/i)) {
+                return await file.text()
+            }
+            
+            // For binary files, read as ArrayBuffer and convert to base64
+            const arrayBuffer = await file.arrayBuffer()
+            const base64 = btoa(
+                new Uint8Array(arrayBuffer).reduce(
+                    (data, byte) => data + String.fromCharCode(byte),
+                    ''
+                )
+            )
+            
+            // Return a data URL representation for binary files
+            return `data:${file.type};base64,${base64}`
+            
         } catch (error) {
             console.error(`Error reading file ${file.name}:`, error)
-            return `Error reading file: ${file.name}`
+            
+            // For very large files or unsupported types, provide file info instead
+            return `Binary file: ${file.name} (${Math.round(file.size / 1024)}KB) - ${file.type || 'Unknown type'}`
         }
     }
 
@@ -190,8 +265,16 @@ function FilesView() {
                     onClick={handleOpenDirectory}
                     disabled={isLoading}
                 >
+                    <TbFolder className="mr-2" size={24} />
+                    {isLoading ? "Loading..." : "Open Folder"}
+                </button>
+                <button
+                    className="flex w-full justify-start rounded-md p-2 transition-all hover:bg-darkHover"
+                    onClick={handleOpenFiles}
+                    disabled={isLoading}
+                >
                     <TbFileUpload className="mr-2" size={24} />
-                    {isLoading ? "Loading..." : "Open File/Folder"}
+                    {isLoading ? "Loading..." : "Add Files"}
                 </button>
                 <button
                     className="flex w-full justify-start rounded-md p-2 transition-all hover:bg-darkHover"
