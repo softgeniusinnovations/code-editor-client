@@ -32,6 +32,8 @@ function AppContextProvider({ children }: { children: ReactNode }) {
 
     const [roomId, setRoomId] = useState<string | null>(null)
 
+    const [userAudioStreams, setUserAudioStreams] = useState<{ [username: string]: MediaStream }>({})
+
     return (
         <AppContext.Provider
             value={{
@@ -48,6 +50,9 @@ function AppContextProvider({ children }: { children: ReactNode }) {
 
                 roomId,
                 setRoomId,
+
+                userAudioStreams,
+                setUserAudioStreams,
             }}
         >
             {children}

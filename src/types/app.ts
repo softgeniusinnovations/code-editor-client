@@ -24,6 +24,10 @@ interface AppContext {
 
     roomId: string | null
     setRoomId: (roomId: string | null) => void
+
+    userAudioStreams: { [username: string]: MediaStream }
+    setUserAudioStreams: (streams: { [username: string]: MediaStream } | ((prev: { [username: string]: MediaStream }) => { [username: string]: MediaStream })) => void
+
 }
 
 export { ACTIVITY_STATE }

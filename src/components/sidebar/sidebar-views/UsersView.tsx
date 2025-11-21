@@ -12,14 +12,17 @@ import { useNavigate } from "react-router-dom"
 function UsersView() {
     const navigate = useNavigate()
     const { viewHeight } = useResponsive()
-    const { setStatus } = useAppContext()
+    const { setStatus, currentUser } = useAppContext()
     const { socket } = useSocket()
 
     const copyURL = async () => {
         const url = window.location.href
+        const roomName = currentUser?.roomId || "Chat Room"
+        const shareText = `Join me in "${roomName}" room!\n${url}`
+        
         try {
-            await navigator.clipboard.writeText(url)
-            toast.success("URL copied to clipboard")
+            await navigator.clipboard.writeText(shareText)
+            toast.success(`"${roomName}" room link copied!`)
         } catch (error) {
             toast.error("Unable to copy URL to clipboard")
             console.log(error)
@@ -28,11 +31,30 @@ function UsersView() {
 
     const shareURL = async () => {
         const url = window.location.href
+        const roomName = currentUser?.roomId || "Chat Room"
+        const shareText = `Join me in "${roomName}" room!`
+        
+        const shareData = {
+            title: `${roomName} - Chat Room`,
+            text: shareText,
+            url: url
+        }
+
         try {
-            await navigator.share({ url })
-        } catch (error) {
-            toast.error("Unable to share URL")
-            console.log(error)
+            if (navigator.share && navigator.canShare?.(shareData)) {
+                await navigator.share(shareData)
+                toast.success(`"${roomName}" room shared successfully!`)
+            } else {
+                // Fallback - copy to clipboard with room info
+                await navigator.clipboard.writeText(`${shareText}\n${url}`)
+                toast.success(`"${roomName}" room link copied to clipboard!`)
+            }
+        } catch (error: any) {
+            if (error.name !== 'AbortError') {
+                // If sharing fails or is cancelled, fallback to copy
+                await navigator.clipboard.writeText(`${shareText}\n${url}`)
+                toast.success(`"${roomName}" room link copied to clipboard!`)
+            }
         }
     }
 
@@ -46,7 +68,11 @@ function UsersView() {
 
     return (
         <div className="flex flex-col p-4" style={{ height: viewHeight }}>
-            <h1 className="view-title">Users</h1>
+            {/* Simple Header without Room ID */}
+            <div className="mb-6">
+                <h1 className="view-title">Users</h1>
+            </div>
+            
             {/* List of connected users */}
             <Users />
             <div className="flex flex-col items-center gap-4 pt-4">
@@ -55,7 +81,7 @@ function UsersView() {
                     <button
                         className="flex flex-grow items-center justify-center rounded-md bg-white p-3 text-black"
                         onClick={shareURL}
-                        title="Share Link"
+                        title={`Share "${currentUser?.roomId || 'Room'}" link`}
                     >
                         <IoShareOutline size={26} />
                     </button>
@@ -63,7 +89,7 @@ function UsersView() {
                     <button
                         className="flex flex-grow items-center justify-center rounded-md bg-white p-3 text-black"
                         onClick={copyURL}
-                        title="Copy Link"
+                        title={`Copy "${currentUser?.roomId || 'Room'}" link`}
                     >
                         <LuCopy size={22} />
                     </button>

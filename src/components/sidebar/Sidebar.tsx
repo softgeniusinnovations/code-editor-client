@@ -1,4 +1,5 @@
 import SidebarButton from "@/components/sidebar/sidebar-views/SidebarButton"
+import AudioControl from "@/components/common/AudioControl" 
 import { useAppContext } from "@/context/AppContext"
 import { useSocket } from "@/context/SocketContext"
 import { useViews } from "@/context/ViewContext"
@@ -24,7 +25,7 @@ function Sidebar() {
         setIsSidebarOpen,
     } = useViews()
     const { minHeightReached } = useResponsive()
-    const { activityState, setActivityState } = useAppContext()
+    const { activityState, setActivityState, currentUser, roomId } = useAppContext() 
     const { socket } = useSocket()
     const { isMobile } = useWindowDimensions()
     const [showTooltip, setShowTooltip] = useState(true)
@@ -127,6 +128,14 @@ function Sidebar() {
                         viewName={VIEWS.SETTINGS}
                         icon={viewIcons[VIEWS.SETTINGS]}
                     />
+
+                    {/* Audio Control Button */}
+                    <div className="flex h-fit items-center justify-center">
+                        <AudioControl 
+                            roomId={roomId || ''} 
+                            username={currentUser.username || ''} 
+                        />
+                    </div>
 
                     {/* Terminal Button */}
                     <div className="flex h-fit items-center justify-center">
