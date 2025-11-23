@@ -65,6 +65,7 @@ const CopilotContextProvider = ({ children }: { children: ReactNode }) => {
             value={{
                 setInput,
                 output,
+                input,
                 isRunning,
                 generateCode,
             }}

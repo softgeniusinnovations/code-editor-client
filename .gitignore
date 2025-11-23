@@ -30,3 +30,7 @@ public/style.css
 # TODO 
 TODO.md
 
+#API Key
+src/config/gpt.ts
+src/config/gemini.ts
+src/config/deepseek.ts

@@ -13,23 +13,60 @@ import { askGemini } from "@/api/gemini"
 import { generateWithGPT as generateWithGPTAPI } from "@/api/chatgpt"
 import { generateWithDeepSeek as generateWithDeepSeekAPI } from "@/api/deepseek"
 
-type TabType = 'gemini' | 'chatgpt' | 'deepseek' | 'copilot'
+type TabType = 'copilot' | 'gemini' | 'chatgpt' | 'deepseek'
 
 function CopilotView() {
     const {socket} = useSocket()
     const { viewHeight } = useResponsive()
-    const { generateCode, output, isRunning, setInput } = useCopilot()
+    const { generateCode, output, isRunning, input, setInput } = useCopilot() 
     const { activeFile, updateFileContent, setActiveFile } = useFileSystem()
-    const [activeTab, setActiveTab] = useState<TabType>('gemini')
+    const [activeTab, setActiveTab] = useState<TabType>('copilot')
+    
+    // Gemini state
     const [geminiInput, setGeminiInput] = useState('')
     const [geminiOutput, setGeminiOutput] = useState('')
     const [isGeminiLoading, setIsGeminiLoading] = useState(false)
+    
+    // ChatGPT state
     const [chatgptInput, setChatgptInput] = useState('')
     const [chatgptOutput, setChatgptOutput] = useState('')
     const [isChatgptLoading, setIsChatgptLoading] = useState(false)
+    
+    // DeepSeek state
     const [deepseekInput, setDeepseekInput] = useState('')
     const [deepseekOutput, setDeepseekOutput] = useState('')
     const [isDeepseekLoading, setIsDeepseekLoading] = useState(false)
+
+    // Get current tab state
+    const getCurrentOutput = () => {
+        switch (activeTab) {
+            case 'copilot': return output
+            case 'gemini': return geminiOutput
+            case 'chatgpt': return chatgptOutput
+            case 'deepseek': return deepseekOutput
+            default: return ''
+        }
+    }
+
+    const getCurrentLoading = () => {
+        switch (activeTab) {
+            case 'copilot': return isRunning
+            case 'gemini': return isGeminiLoading
+            case 'chatgpt': return isChatgptLoading
+            case 'deepseek': return isDeepseekLoading
+            default: return false
+        }
+    }
+
+    const getCurrentInput = () => {
+        switch (activeTab) {
+            case 'copilot': return input 
+            case 'gemini': return geminiInput
+            case 'chatgpt': return chatgptInput
+            case 'deepseek': return deepseekInput
+            default: return ''
+        }
+    }
 
     // Gemini Functions
     const generateWithGemini = async () => {
@@ -94,8 +131,28 @@ function CopilotView() {
         }
     }
 
-    // Common Functions
-    const copyOutput = async (content: string) => {
+    const handleGenerate = () => {
+        switch (activeTab) {
+            case 'copilot': generateCode(); break
+            case 'gemini': generateWithGemini(); break
+            case 'chatgpt': generateWithChatGPT(); break
+            case 'deepseek': generateWithDeepSeek(); break
+        }
+    }
+
+    const handleInputChange = (value: string) => {
+        switch (activeTab) {
+            case 'copilot': setInput(value); break
+            case 'gemini': setGeminiInput(value); break
+            case 'chatgpt': setChatgptInput(value); break
+            case 'deepseek': setDeepseekInput(value); break
+        }
+    }
+
+    const copyOutput = async () => {
+        const content = getCurrentOutput()
+        if (!content) return
+        
         try {
             const cleanedContent = content.replace(/```[\w]*\n?/g, "").trim()
             await navigator.clipboard.writeText(cleanedContent)
@@ -106,144 +163,69 @@ function CopilotView() {
         }
     }
 
-    const pasteCodeInFile = (content: string) => {
-        if (activeFile) {
-            const fileContent = activeFile.content
-                ? `${activeFile.content}\n`
-                : ""
-            const cleanedContent = `${fileContent}${content.replace(/```[\w]*\n?/g, "").trim()}`
-            updateFileContent(activeFile.id, cleanedContent)
-            setActiveFile({ ...activeFile, content: cleanedContent })
-            toast.success("Code pasted successfully")
-            socket.emit(SocketEvent.FILE_UPDATED, {
-                fileId: activeFile.id,
-                newContent: cleanedContent,
-            })
-        }
+    const pasteCodeInFile = () => {
+        const content = getCurrentOutput()
+        if (!content || !activeFile) return
+
+        const fileContent = activeFile.content
+            ? `${activeFile.content}\n`
+            : ""
+        const cleanedContent = `${fileContent}${content.replace(/```[\w]*\n?/g, "").trim()}`
+        updateFileContent(activeFile.id, cleanedContent)
+        setActiveFile({ ...activeFile, content: cleanedContent })
+        toast.success("Code pasted successfully")
+        socket.emit(SocketEvent.FILE_UPDATED, {
+            fileId: activeFile.id,
+            newContent: cleanedContent,
+        })
     }
 
-    const replaceCodeInFile = (content: string) => {
-        if (activeFile) {
-            const isConfirmed = confirm(
-                `Are you sure you want to replace the code in the file?`,
-            )
-            if (!isConfirmed) return
-            const cleanedContent = content.replace(/```[\w]*\n?/g, "").trim()
-            updateFileContent(activeFile.id, cleanedContent)
-            setActiveFile({ ...activeFile, content: cleanedContent })
-            toast.success("Code replaced successfully")
-            socket.emit(SocketEvent.FILE_UPDATED, {
-                fileId: activeFile.id,
-                newContent: cleanedContent,
-            })
-        }
-    }
+    const replaceCodeInFile = () => {
+        const content = getCurrentOutput()
+        if (!content || !activeFile) return
 
-    // Helper functions to get current state
-    const getCurrentOutput = () => {
-        switch (activeTab) {
-            case 'gemini': return geminiOutput
-            case 'chatgpt': return chatgptOutput
-            case 'deepseek': return deepseekOutput
-            case 'copilot': return output
-            default: return ''
-        }
-    }
-
-    const getCurrentLoading = () => {
-        switch (activeTab) {
-            case 'gemini': return isGeminiLoading
-            case 'chatgpt': return isChatgptLoading
-            case 'deepseek': return isDeepseekLoading
-            case 'copilot': return isRunning
-            default: return false
-        }
-    }
-
-    const getCurrentInput = () => {
-        switch (activeTab) {
-            case 'gemini': return geminiInput
-            case 'chatgpt': return chatgptInput
-            case 'deepseek': return deepseekInput
-            case 'copilot': return ''
-            default: return ''
-        }
-    }
-
-    const setCurrentInput = (value: string) => {
-        switch (activeTab) {
-            case 'gemini': setGeminiInput(value); break
-            case 'chatgpt': setChatgptInput(value); break
-            case 'deepseek': setDeepseekInput(value); break
-            case 'copilot': setInput(value); break
-        }
-    }
-
-    const handleGenerate = () => {
-        switch (activeTab) {
-            case 'gemini': generateWithGemini(); break
-            case 'chatgpt': generateWithChatGPT(); break
-            case 'deepseek': generateWithDeepSeek(); break
-            case 'copilot': generateCode(); break
-        }
+        const isConfirmed = confirm(
+            `Are you sure you want to replace the code in the file?`,
+        )
+        if (!isConfirmed) return
+        
+        const cleanedContent = content.replace(/```[\w]*\n?/g, "").trim()
+        updateFileContent(activeFile.id, cleanedContent)
+        setActiveFile({ ...activeFile, content: cleanedContent })
+        toast.success("Code replaced successfully")
+        socket.emit(SocketEvent.FILE_UPDATED, {
+            fileId: activeFile.id,
+            newContent: cleanedContent,
+        })
     }
 
     const getButtonText = () => {
         const baseText = {
+            'copilot': 'Generate Code',
             'gemini': 'Generate with Gemini',
             'chatgpt': 'Generate with ChatGPT',
-            'deepseek': 'Generate with DeepSeek',
-            'copilot': 'Generate Code'
+            'deepseek': 'Generate with DeepSeek'
         }[activeTab]
 
-        return getCurrentLoading() ? `Generating with ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}...` : baseText
+        return getCurrentLoading() ? `Generating...` : baseText
     }
 
     const getButtonColor = () => {
         switch (activeTab) {
+            case 'copilot': return 'bg-primary'
             case 'gemini': return 'bg-blue-600'
             case 'chatgpt': return 'bg-green-600'
             case 'deepseek': return 'bg-purple-600'
-            case 'copilot': return 'bg-primary'
+            default: return 'bg-primary'
         }
-    }
-
-    const renderActionButtons = (content: string) => {
-        if (!content) return null
-
-        return (
-            <div className="flex justify-end gap-4 pt-2">
-                <button 
-                    title="Copy Output" 
-                    onClick={() => copyOutput(content)}
-                    className="p-1 rounded hover:bg-darkHover transition-colors"
-                >
-                    <LuCopy size={18} className="text-white" />
-                </button>
-                <button
-                    title="Replace code in file"
-                    onClick={() => replaceCodeInFile(content)}
-                    className="p-1 rounded hover:bg-darkHover transition-colors"
-                >
-                    <LuRepeat size={18} className="text-white" />
-                </button>
-                <button
-                    title="Paste code in file"
-                    onClick={() => pasteCodeInFile(content)}
-                    className="p-1 rounded hover:bg-darkHover transition-colors"
-                >
-                    <LuClipboardPaste size={18} className="text-white" />
-                </button>
-            </div>
-        )
     }
 
     const getPlaceholderText = () => {
         switch (activeTab) {
+            case 'copilot': return "What code do you want to generate?"
             case 'gemini': return "Ask Gemini to generate code..."
             case 'chatgpt': return "Ask ChatGPT to generate code..."
             case 'deepseek': return "Ask DeepSeek to generate code..."
-            case 'copilot': return "What code do you want to generate?"
             default: return "Enter your prompt..."
         }
     }
@@ -257,16 +239,16 @@ function CopilotView() {
             
             {/* Tab Navigation */}
             <div className="flex border-b border-gray-600 gap-1">
-                {(['gemini', 'chatgpt', 'deepseek', 'copilot'] as TabType[]).map((tab) => (
+                {(['copilot', 'gemini', 'chatgpt', 'deepseek'] as TabType[]).map((tab) => (
                     <button
                         key={tab}
                         className={`px-4 py-2 font-medium transition-colors rounded-t-md capitalize ${
                             activeTab === tab 
                                 ? `border-b-2 ${
+                                    tab === 'copilot' ? 'border-primary text-primary' :
                                     tab === 'gemini' ? 'border-blue-500 text-blue-500' :
                                     tab === 'chatgpt' ? 'border-green-500 text-green-500' :
-                                    tab === 'deepseek' ? 'border-purple-500 text-purple-500' :
-                                    'border-primary text-primary'
+                                    'border-purple-500 text-purple-500'
                                 }` 
                                 : 'text-gray-400 hover:text-white'
                         }`}
@@ -284,9 +266,7 @@ function CopilotView() {
                 className="min-h-[120px] w-full rounded-md border-none bg-darkHover p-2 text-white outline-none"
                 placeholder={getPlaceholderText()}
                 value={getCurrentInput()}
-                onChange={(e) => {
-                    setCurrentInput(e.target.value)
-                }}
+                onChange={(e) => handleInputChange(e.target.value)}
             />
             
             <button
@@ -298,7 +278,31 @@ function CopilotView() {
             </button>
 
             {/* Output Actions */}
-            {renderActionButtons(getCurrentOutput())}
+            {getCurrentOutput() && (
+                <div className="flex justify-end gap-4 pt-2">
+                    <button 
+                        title="Copy Output" 
+                        onClick={copyOutput}
+                        className="p-1 rounded hover:bg-darkHover transition-colors"
+                    >
+                        <LuCopy size={18} className="text-white" />
+                    </button>
+                    <button
+                        title="Replace code in file"
+                        onClick={replaceCodeInFile}
+                        className="p-1 rounded hover:bg-darkHover transition-colors"
+                    >
+                        <LuRepeat size={18} className="text-white" />
+                    </button>
+                    <button
+                        title="Paste code in file"
+                        onClick={pasteCodeInFile}
+                        className="p-1 rounded hover:bg-darkHover transition-colors"
+                    >
+                        <LuClipboardPaste size={18} className="text-white" />
+                    </button>
+                </div>
+            )}
 
             {/* Output Display */}
             <div className="h-full rounded-lg w-full overflow-y-auto p-0">
