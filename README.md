@@ -101,7 +101,7 @@ src/utils/CustomMapping.ts
 Clone repository:
 
 ```bash
-git clone https://github.com/smshagor-dev/code-editor
+git clone https://github.com/smshagor-dev/code-editor.git
 cd code-editor
 ````
 
@@ -123,7 +123,8 @@ yarn dev
 
 ---
 
-## 🔧 Environment Setup
+## 🔧 Environment Setup 
+If you have backend then change url or use my backend
 
 Create `.env` file:
 
