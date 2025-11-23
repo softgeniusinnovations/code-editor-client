@@ -262,7 +262,7 @@ function Sidebar() {
                         {/* Terminal Output */}
                         <div className="flex-1 overflow-y-auto bg-[#0C0C0C] p-4 font-mono text-sm">
                             <div className="text-green-400">
-                                Windows Terminal [Version 1.0.0]
+                                Cloud Terminal [Version 1.0.0]
                                 <br />
                                 (c) Code Editor Cloud. All rights reserved.
                                 <br />

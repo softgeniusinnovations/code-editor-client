@@ -1,158 +1,121 @@
-export class WebRTCManager {
-    private peerConnection: RTCPeerConnection | null = null;
-    private localStream: MediaStream | null = null;
-    private remoteStreams: Map<string, MediaStream> = new Map();
-    private isAudioEnabled: boolean = false;
+import { io } from "socket.io-client";
 
-    constructor(private socket: any, private roomId: string, private username: string) {
-        this.initializePeerConnection();
-    }
+let socket: any = null;
+let mediaRecorder: MediaRecorder | null = null;
+let sending = false;
 
-    private initializePeerConnection() {
-        const configuration: RTCConfiguration = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' }
-            ]
+let roomId = "";
+let username = "";
+
+// --------------------------
+// INIT + SOCKET SETUP
+// --------------------------
+export function initWebRTC(_roomId: string, _username: string) {
+    roomId = _roomId;
+    username = _username;
+
+    socket = io();
+
+    // join room
+    socket.emit("JOIN_ROOM", {
+        roomId,
+        username
+    });
+
+    // receive audio from others
+    socket.on("AUDIO_BLOB", (data: { from: string; blob: ArrayBuffer }) => {
+        playIncomingAudio(data.from, data.blob);
+    });
+
+    // receive mute/unmute updates
+    socket.on("USER_AUDIO_TOGGLED", (data: { username: string; isAudioEnabled: boolean }) => {
+        const state = data.isAudioEnabled ? "unmuted" : "muted";
+        console.log(`User ${data.username} is now ${state}`);
+    });
+}
+
+// --------------------------
+// START SENDING AUDIO
+// --------------------------
+export async function startSendingAudio() {
+    try {
+        if (sending) return;
+        sending = true;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false
+        });
+
+        const options: MediaRecorderOptions = {
+            mimeType: "audio/webm;codecs=opus"
         };
 
-        this.peerConnection = new RTCPeerConnection(configuration);
+        try {
+            mediaRecorder = new MediaRecorder(stream, options);
+        } catch {
+            mediaRecorder = new MediaRecorder(stream);
+        }
 
-        // Handle incoming tracks
-        this.peerConnection.ontrack = (event) => {
-            const [remoteStream] = event.streams;
-            const userId = event.transceiver.mid || 'unknown';
-            this.remoteStreams.set(userId, remoteStream);
-            
-            // Emit event for UI to handle new remote stream
-            this.socket.emit('REMOTE_AUDIO_STREAM_ADDED', { 
-                userId, 
-                roomId: this.roomId,
-                username: this.username 
-            });
-        };
-
-        // Handle ICE candidates
-        this.peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                this.socket.emit('WEBRTC_ICE_CANDIDATE', {
-                    candidate: event.candidate,
-                    roomId: this.roomId,
-                    targetUser: this.username
+        mediaRecorder.ondataavailable = (ev: BlobEvent) => {
+            const chunk = ev.data;
+            if (chunk && chunk.size > 0) {
+                chunk.arrayBuffer().then((buffer: ArrayBuffer) => {
+                    socket.emit("AUDIO_BLOB", {
+                        roomId,
+                        username,
+                        blob: buffer
+                    });
                 });
             }
         };
 
-        // Handle connection state changes
-        this.peerConnection.onconnectionstatechange = () => {
-            console.log('WebRTC connection state:', this.peerConnection?.connectionState);
-        };
+        mediaRecorder.start(250); // send 4 chunks per second
+
+        socket.emit("USER_AUDIO_TOGGLED", {
+            roomId,
+            username,
+            isAudioEnabled: true
+        });
+
+        console.log("Microphone streaming ON");
+    } catch (err) {
+        console.error("Mic error:", err);
     }
+}
 
-    async enableAudio(): Promise<boolean> {
-        try {
-            this.localStream = await navigator.mediaDevices.getUserMedia({ 
-                audio: true, 
-                video: false 
-            });
+// --------------------------
+// STOP SENDING AUDIO
+// --------------------------
+export function stopSendingAudio() {
+    if (!mediaRecorder) return;
 
-            // Add audio tracks to peer connection
-            this.localStream.getAudioTracks().forEach(track => {
-                this.peerConnection?.addTrack(track, this.localStream!);
-            });
+    mediaRecorder.stop();
+    mediaRecorder = null;
+    sending = false;
 
-            this.isAudioEnabled = true;
-            return true;
-        } catch (error) {
-            console.error('Error enabling audio:', error);
-            this.isAudioEnabled = false;
-            return false;
-        }
-    }
+    socket.emit("USER_AUDIO_TOGGLED", {
+        roomId,
+        username,
+        isAudioEnabled: false
+    });
 
-    disableAudio() {
-        if (this.localStream) {
-            this.localStream.getTracks().forEach(track => {
-                track.stop();
-            });
-            this.localStream = null;
-        }
+    console.log("Microphone streaming OFF");
+}
 
-        // Remove all senders
-        if (this.peerConnection) {
-            this.peerConnection.getSenders().forEach(sender => {
-                if (sender.track) {
-                    sender.track.stop();
-                }
-            });
-        }
+// --------------------------
+// PLAY RECEIVED AUDIO
+// --------------------------
+function playIncomingAudio(from: string, blob: ArrayBuffer) {
+    const audioBlob = new Blob([blob], { type: "audio/webm;codecs=opus" });
+    const url = URL.createObjectURL(audioBlob);
 
-        this.isAudioEnabled = false;
-    }
+    const audio = new Audio(url);
+    audio.autoplay = true;
 
-    async createOffer(): Promise<RTCSessionDescriptionInit | null> {
-        try {
-            if (!this.peerConnection) return null;
+    audio.onended = () => {
+        URL.revokeObjectURL(url);
+    };
 
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
-            return offer;
-        } catch (error) {
-            console.error('Error creating offer:', error);
-            return null;
-        }
-    }
-
-    async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit | null> {
-        try {
-            if (!this.peerConnection) return null;
-
-            await this.peerConnection.setRemoteDescription(offer);
-            const answer = await this.peerConnection.createAnswer();
-            await this.peerConnection.setLocalDescription(answer);
-            return answer;
-        } catch (error) {
-            console.error('Error handling offer:', error);
-            return null;
-        }
-    }
-
-    async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-        try {
-            if (!this.peerConnection) return;
-            await this.peerConnection.setRemoteDescription(answer);
-        } catch (error) {
-            console.error('Error handling answer:', error);
-        }
-    }
-
-    async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
-        try {
-            if (!this.peerConnection) return;
-            await this.peerConnection.addIceCandidate(candidate);
-        } catch (error) {
-            console.error('Error adding ICE candidate:', error);
-        }
-    }
-
-    getLocalStream(): MediaStream | null {
-        return this.localStream;
-    }
-
-    getRemoteStreams(): Map<string, MediaStream> {
-        return this.remoteStreams;
-    }
-
-    getIsAudioEnabled(): boolean {
-        return this.isAudioEnabled;
-    }
-
-    close() {
-        this.disableAudio();
-        if (this.peerConnection) {
-            this.peerConnection.close();
-            this.peerConnection = null;
-        }
-        this.remoteStreams.clear();
-    }
+    console.log("Playing audio from:", from);
 }

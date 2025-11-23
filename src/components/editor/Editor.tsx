@@ -52,7 +52,7 @@ function Editor() {
     const editorRef = useRef<any>(null)
     const [lastCursorPosition, setLastCursorPosition] = useState<number>(0)
     const [lastSelection, setLastSelection] = useState<{start?: number, end?: number}>({})
-    const cursorMoveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const cursorMoveTimeoutRef = useRef<number | null>(null)
 
     // Enhanced language mapping with fallback support
     const languageExtensions: { [key: string]: () => Extension } = {
@@ -184,12 +184,12 @@ function Editor() {
             setLastSelection({ start: selectionStart, end: selectionEnd })
 
             // Clear existing timeout
-            if (cursorMoveTimeoutRef.current) {
-                clearTimeout(cursorMoveTimeoutRef.current)
+            if (cursorMoveTimeoutRef.current !== null) {
+                window.clearTimeout(cursorMoveTimeoutRef.current)
             }
 
             // Debounce cursor move events
-            cursorMoveTimeoutRef.current = setTimeout(() => {
+            cursorMoveTimeoutRef.current = window.setTimeout(() => {
                 socket.emit(SocketEvent.CURSOR_MOVE, {
                     cursorPosition,
                     selectionStart,
@@ -198,6 +198,16 @@ function Editor() {
             }, 100) // 100ms debounce
         }
     }, [lastCursorPosition, lastSelection, socket])
+
+    // Cleanup timeouts on unmount
+    useEffect(() => {
+        return () => {
+            if (cursorMoveTimeoutRef.current !== null) {
+                window.clearTimeout(cursorMoveTimeoutRef.current)
+            }
+            clearTimeout(timeOut)
+        }
+    }, [timeOut])
 
     // Listen wheel event to zoom in/out and prevent page reload
     usePageEvents()

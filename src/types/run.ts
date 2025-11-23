@@ -12,6 +12,27 @@ interface RunContext {
     selectedLanguage: Language
     setSelectedLanguage: (language: Language) => void
     runCode: () => void
+    hasVisualization: boolean
+    showVisualization: () => void
+    showInputCollector: boolean
+    setShowInputCollector: (show: boolean) => void
+    collectedInputs: CollectedInputs
+     setCollectedInputs: (inputs: CollectedInputs | ((prev: CollectedInputs) => CollectedInputs)) => void
+    submitCollectedInputs: () => void
+    executeCode: () => void
 }
 
-export { Language, RunContext }
+interface CollectedInputs {
+    textInputs: { [key: string]: string }
+    fileInputs: { [key: string]: File | null }
+}
+
+interface InputField {
+    id: string
+    label: string
+    type: 'text' | 'number' | 'file'
+    required: boolean
+    accept?: string
+}
+
+export { Language, RunContext, CollectedInputs, InputField }

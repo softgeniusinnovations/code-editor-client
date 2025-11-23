@@ -23,6 +23,7 @@
         "@codemirror/lang-xml": "^6.1.0",
         "@codemirror/language-data": "^6.5.2",
         "@fortawesome/fontawesome-free": "^7.1.0",
+        "@google/generative-ai": "^0.24.1",
         "@uiw/codemirror-extensions-color": "^4.21.21",
         "@uiw/codemirror-extensions-hyper-link": "^4.21.21",
         "@uiw/codemirror-extensions-langs": "^4.21.21",

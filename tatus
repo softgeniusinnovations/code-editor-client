@@ -1,0 +1,19 @@
+[33md1a35c0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{0}: reset: moving to d1a35c0
+[33m07f4f15[m[33m ([m[1;31morigin/main[m[33m)[m HEAD@{1}: reset: moving to 07f4f15
+[33md1a35c0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{2}: reset: moving to HEAD~1
+[33m16a833d[m HEAD@{3}: reset: moving to HEAD
+[33m16a833d[m HEAD@{4}: reset: moving to HEAD~1
+[33mf9785b4[m HEAD@{5}: commit: Ignore GPT config file
+[33m16a833d[m HEAD@{6}: commit: Remove exposed API key
+[33md1a35c0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{7}: commit: add openai key
+[33m4baf1a0[m HEAD@{8}: commit: add openai key
+[33m93432cf[m HEAD@{9}: commit: add gpt and resolve audio
+[33m07f4f15[m[33m ([m[1;31morigin/main[m[33m)[m HEAD@{10}: commit: change env
+[33m2e69fc5[m HEAD@{11}: commit: add audio
+[33m467b6de[m HEAD@{12}: commit: add user management for owner
+[33m80bb305[m HEAD@{13}: commit: add room edit and delete
+[33m8739d9d[m HEAD@{14}: commit: photo upload view add and chat solve
+[33m168c3d4[m HEAD@{15}: commit: resolve chating system with db
+[33m120a24d[m HEAD@{16}: commit: add file to db and add join with password
+[33m959a784[m HEAD@{17}: Branch: renamed refs/heads/master to refs/heads/main
+[33m959a784[m HEAD@{19}: commit (initial): first commit
