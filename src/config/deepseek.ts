@@ -1,4 +1,4 @@
 export const DEEPSEEK_CONFIG = {
-  apiKey: "sk-a5c0ec44b4df4aafa42621b9ac10db5d",
+  apiKey: "your_actual_api_key_here",
   baseURL: "https://api.deepseek.com",
 };

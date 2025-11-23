@@ -7,7 +7,7 @@ function GitHubCorner() {
 
     return (
         <a
-            href="https://github.com/smshagor-dev"
+            href="https://github.com/smshagor-dev/code-editor"
             className="github-corner"
             aria-label="View source on GitHub"
             target="_blank"

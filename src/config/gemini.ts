@@ -1,3 +1,3 @@
 export const GEMINI_CONFIG = {
-  apiKey: "AIzaSyCC1seArxkwrLageOaqhpoWeZUAKU5UlaU"
+  apiKey: "your_actual_api_key_here"
 };
